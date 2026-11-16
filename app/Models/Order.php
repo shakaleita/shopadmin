@@ -2,6 +2,6 @@
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class Order extends Model {
- protected $fillable=['customer_name','customer_email','status','total_cents'];
+ protected $fillable=['customer_name','customer_email','status','total_cents','idempotency_key','request_fingerprint'];
  public function items(){return $this->hasMany(OrderItem::class);}
 }
