@@ -17,6 +17,10 @@ jobs:
           coverage: none
       - run: mkdir -p bootstrap/cache storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
       - run: composer install --no-interaction --prefer-dist --no-progress
+      - name: PHP application source syntax
+        run: find app routes database -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Composer dependency vulnerability audit
+        run: composer audit --no-dev --format=plain
       - run: cp .env.example .env && php artisan key:generate
       - run: ./vendor/bin/phpunit
         env:
