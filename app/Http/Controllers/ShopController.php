@@ -24,7 +24,21 @@ class ShopController {
   $data=$request->validate(['status'=>'required|in:pending,processing,shipped,delivered,cancelled']);
   $allowed=['pending'=>['processing','cancelled'],'processing'=>['shipped','cancelled'],'shipped'=>['delivered'],'delivered'=>[],'cancelled'=>[]];
   if($data['status']!==$order->status && !in_array($data['status'],$allowed[$order->status]??[],true))throw ValidationException::withMessages(['status'=>'Transition is not allowed']);
-  $order->update(['status'=>$data['status']]);return back()->with('success','Order updated');
+  DB::transaction(function()use($order,$data){
+   $locked=Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+   $allowed=['pending'=>['processing','cancelled'],'processing'=>['shipped','cancelled'],'shipped'=>['delivered'],'delivered'=>[],'cancelled'=>[]];
+   if($data['status']===$locked->status)return;
+   if(!in_array($data['status'],$allowed[$locked->status]??[],true))
+    throw ValidationException::withMessages(['status'=>'Transition is not allowed']);
+   $previous=$locked->status;
+   $locked->update(['status'=>$data['status']]);
+   DB::table('order_status_events')->insert(['order_id'=>$locked->id,'from_status'=>$previous,'to_status'=>$data['status'],'changed_at'=>now()]);
+  });
+  return back()->with('success','Order updated');
+ }
+ public function history(Order $order){
+  return response()->json(DB::table('order_status_events')
+    ->where('order_id',$order->id)->orderBy('id')->get());
  }
  public function insights(){return response()->json(['products'=>Product::count(),'active_products'=>Product::where('active',true)->count(),'orders_by_status'=>Order::selectRaw('status, COUNT(*) total')->groupBy('status')->pluck('total','status'),'total_order_value_cents'=>Order::sum('total_cents')]);}
 
