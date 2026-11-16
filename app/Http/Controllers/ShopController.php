@@ -30,8 +30,12 @@ class ShopController {
     }
     $product=Product::findOrFail($data['product_id']);
     if(!$product->active)throw ValidationException::withMessages(['product_id'=>'Product unavailable']);
+    $total=(int)$product->price_cents*(int)$data['quantity'];
+    // Keep totals within portable signed 32-bit database limits.
+    if($total>2000000000)
+     throw ValidationException::withMessages(['quantity'=>'Order total exceeds the supported amount']);
     $order=Order::create(['customer_name'=>$data['customer_name'],'customer_email'=>$data['customer_email'],
-      'status'=>'pending','total_cents'=>$product->price_cents*$data['quantity'],
+      'status'=>'pending','total_cents'=>$total,
       'idempotency_key'=>$key,'request_fingerprint'=>$key===null?null:$fingerprint]);
     $order->items()->create(['product_id'=>$product->id,'name_snapshot'=>$product->name,
       'quantity'=>$data['quantity'],'price_cents'=>$product->price_cents]);
