@@ -11,3 +11,5 @@ Route::get('/api/insights',[ShopController::class,'insights'])->name('shop-insig
 Route::get('/api/export/shop-orders.csv',[ShopController::class,'export'])->name('shop-orders-export');
 
 Route::get('/api/orders/{order}/history',[ShopController::class,'history'])->name('orders.history');
+
+Route::get('/api/fulfilment/report',[ShopController::class,'fulfilmentReport'])->name('shop.fulfilment-report');
