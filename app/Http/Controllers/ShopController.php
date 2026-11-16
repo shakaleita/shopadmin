@@ -8,7 +8,7 @@ use Illuminate\Validation\ValidationException;
 class ShopController {
  public function index(){return view('shop.index',['products'=>Product::orderBy('name')->get(),'orders'=>Order::with('items')->latest()->get()]);}
  public function product(Request $request){
-  $data=$request->validate(['sku'=>'required|string|max:100|unique:products,sku','name'=>'required|string|max:255','price_cents'=>'required|integer|min:0']);
+  $data=$request->validate(['sku'=>'required|string|max:100|unique:products,sku','name'=>'required|string|max:255','price_cents'=>'required|integer|min:0|max:100000000']);
   Product::create($data);return back()->with('success','Product added');
  }
  public function order(Request $request){
@@ -39,6 +39,19 @@ class ShopController {
  public function history(Order $order){
   return response()->json(DB::table('order_status_events')
     ->where('order_id',$order->id)->orderBy('id')->get());
+ }
+ /** Distinguish fulfilled, active, and cancelled orders in cents. */
+ public function fulfilmentReport(){
+  $stages=Order::selectRaw('status,COUNT(*) as orders,COALESCE(SUM(total_cents),0) as value_cents')
+   ->groupBy('status')->orderBy('status')->get()->map(fn($row)=>[
+     'status'=>$row->status,'orders'=>(int)$row->orders,'value_cents'=>(int)$row->value_cents,
+   ]);
+  return response()->json([
+   'stages'=>$stages,
+   'active_order_value_cents'=>(int)Order::whereIn('status',['pending','processing','shipped'])->sum('total_cents'),
+   'delivered_order_value_cents'=>(int)Order::where('status','delivered')->sum('total_cents'),
+   'cancelled_order_value_cents'=>(int)Order::where('status','cancelled')->sum('total_cents'),
+  ]);
  }
  public function insights(){return response()->json(['products'=>Product::count(),'active_products'=>Product::where('active',true)->count(),'orders_by_status'=>Order::selectRaw('status, COUNT(*) total')->groupBy('status')->pluck('total','status'),'total_order_value_cents'=>Order::sum('total_cents')]);}
 
