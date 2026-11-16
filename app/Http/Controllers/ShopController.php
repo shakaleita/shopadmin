@@ -12,13 +12,39 @@ class ShopController {
   Product::create($data);return back()->with('success','Product added');
  }
  public function order(Request $request){
-  $data=$request->validate(['customer_name'=>'required|string|max:255','customer_email'=>'required|email|max:255','product_id'=>'required|exists:products,id','quantity'=>'required|integer|min:1|max:10000']);
-  DB::transaction(function()use($data){
-   $product=Product::findOrFail($data['product_id']);
-   if(!$product->active)throw ValidationException::withMessages(['product_id'=>'Product unavailable']);
-   $order=Order::create(['customer_name'=>$data['customer_name'],'customer_email'=>$data['customer_email'],'status'=>'pending','total_cents'=>$product->price_cents*$data['quantity']]);
-   $order->items()->create(['product_id'=>$product->id,'name_snapshot'=>$product->name,'quantity'=>$data['quantity'],'price_cents'=>$product->price_cents]);
-  });return back()->with('success','Order created');
+  $data=$request->validate(['customer_name'=>'required|string|max:255','customer_email'=>'required|email|max:255','product_id'=>'required|exists:products,id','quantity'=>'required|integer|min:1|max:10000','idempotency_key'=>'nullable|string|max:120|regex:/^[A-Za-z0-9_-]+$/']);
+  $key=$data['idempotency_key']??null;
+  $fingerprint=hash('sha256',json_encode([
+   trim($data['customer_name']),strtolower(trim($data['customer_email'])),
+   (int)$data['product_id'],(int)$data['quantity'],
+  ],JSON_THROW_ON_ERROR));
+  try {
+   DB::transaction(function()use($data,$key,$fingerprint){
+    if($key!==null){
+     $existing=Order::where('idempotency_key',$key)->lockForUpdate()->first();
+     if($existing){
+      if(!hash_equals((string)$existing->request_fingerprint,$fingerprint))
+       throw ValidationException::withMessages(['idempotency_key'=>'Key already used for a different order']);
+      return;
+     }
+    }
+    $product=Product::findOrFail($data['product_id']);
+    if(!$product->active)throw ValidationException::withMessages(['product_id'=>'Product unavailable']);
+    $order=Order::create(['customer_name'=>$data['customer_name'],'customer_email'=>$data['customer_email'],
+      'status'=>'pending','total_cents'=>$product->price_cents*$data['quantity'],
+      'idempotency_key'=>$key,'request_fingerprint'=>$key===null?null:$fingerprint]);
+    $order->items()->create(['product_id'=>$product->id,'name_snapshot'=>$product->name,
+      'quantity'=>$data['quantity'],'price_cents'=>$product->price_cents]);
+   },3);
+  }catch(\Illuminate\Database\QueryException $exception){
+   // A concurrent insert may win the unique-key race. Re-read and accept
+   // only an exactly matching previous request; otherwise preserve the error.
+   if($key===null)throw $exception;
+   $existing=Order::where('idempotency_key',$key)->first();
+   if(!$existing||!hash_equals((string)$existing->request_fingerprint,$fingerprint))
+    throw $exception;
+  }
+  return back()->with('success','Order saved (duplicate requests do not create extra orders)');
  }
  public function status(Request $request,Order $order){
   $data=$request->validate(['status'=>'required|in:pending,processing,shipped,delivered,cancelled']);
