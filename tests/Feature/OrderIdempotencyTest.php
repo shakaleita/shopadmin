@@ -31,4 +31,13 @@ class OrderIdempotencyTest extends TestCase {
   $this->post('/orders',$body)->assertRedirect();
   $this->assertSame(3,Order::count());
  }
+
+ public function test_rejects_order_total_that_exceeds_supported_database_range():void {
+  Product::create(['sku'=>'MAX-TOTAL','name'=>'Maximum priced demo item','price_cents'=>100000000]);
+  $product=Product::where('sku','MAX-TOTAL')->firstOrFail();
+  $this->post('/orders',['customer_name'=>'Synthetic Buyer','customer_email'=>'buyer@example.test',
+       'product_id'=>$product->id,'quantity'=>25,'idempotency_key'=>'large-order-0001'])
+    ->assertSessionHasErrors('quantity');
+  $this->assertSame(0,Order::count());
+ }
 }
