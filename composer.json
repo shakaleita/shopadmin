@@ -4,7 +4,7 @@
   "description": "E-commerce administration dashboard for catalogue products, customer orders and fulfilment statuses.",
   "require": {
     "php": "^8.2",
-    "laravel/framework": "^12.0"
+    "laravel/framework": "^13.42"
   },
   "autoload": {
     "psr-4": {
