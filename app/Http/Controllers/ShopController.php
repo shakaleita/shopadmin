@@ -27,4 +27,25 @@ class ShopController {
   $order->update(['status'=>$data['status']]);return back()->with('success','Order updated');
  }
  public function insights(){return response()->json(['products'=>Product::count(),'active_products'=>Product::where('active',true)->count(),'orders_by_status'=>Order::selectRaw('status, COUNT(*) total')->groupBy('status')->pluck('total','status'),'total_order_value_cents'=>Order::sum('total_cents')]);}
+
+ /**
+  * Stream a deterministic read-only CSV snapshot of the local demo dataset.
+  * Spreadsheet formula prefixes are escaped to prevent formula interpretation.
+  */
+ public function export(){
+  return response()->streamDownload(function(){
+   $handle=fopen('php://output','w');
+   fputcsv($handle, ['id','status','total_cents','created_at'], ',', '"', '');
+   foreach(Order::orderBy('id')->cursor() as $record){
+    $row=[];
+    foreach(['id','status','total_cents','created_at'] as $column){
+     $value=(string)($record->{$column}??'');
+     if(preg_match('/^\s*[=+\-@\t\r]/u',$value))$value="'".$value;
+     $row[]=$value;
+    }
+    fputcsv($handle,$row,',','"','');
+   }
+   fclose($handle);
+  }, 'shop-orders.csv', ['Content-Type'=>'text/csv; charset=UTF-8','Cache-Control'=>'no-store']);
+ }
 }
