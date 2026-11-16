@@ -15,6 +15,7 @@ jobs:
           php-version: '8.3'
           extensions: mbstring, dom, sqlite3, pdo_sqlite
           coverage: none
+      - run: mkdir -p bootstrap/cache storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: cp .env.example .env && php artisan key:generate
       - run: php artisan test
